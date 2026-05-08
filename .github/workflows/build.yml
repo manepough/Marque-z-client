@@ -45,12 +45,13 @@ jobs:
             "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Setup And64InlineHook and patch Android.mk
+      - name: Setup And64InlineHook and rebuild Android.mk
         run: |
           JNI="app/src/main/jni"
 
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
+          # Create Dobby compatibility shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
           printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
           printf 'static inline int DobbyHook(void* addr, void* replace, void** orig) {\n' >> "$JNI/dobby_compat.h"
@@ -59,21 +60,34 @@ jobs:
           printf 'static inline int DobbyDestroy(void* addr) { return 0; }\n' >> "$JNI/dobby_compat.h"
           printf 'static inline void* DobbySymbolResolver(const char* img, const char* sym) { return nullptr; }\n' >> "$JNI/dobby_compat.h"
 
-          echo "=== Android.mk BEFORE patch ==="
+          echo "=== Original Android.mk ==="
           cat "$JNI/Android.mk"
 
-          # Remove ALL Dobby-related lines from Android.mk
-          sed -i '/[Dd]obby/d' "$JNI/Android.mk"
-          sed -i '/PREBUILT_STATIC_LIBRARY/d' "$JNI/Android.mk"
-          sed -i '/libraries\//d' "$JNI/Android.mk"
+          # Extract key values from original Android.mk before rewriting
+          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
+          ORIG_CPPFLAGS=$(grep "LOCAL_CPPFLAGS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
+          ORIG_LDLIBS=$(grep "LOCAL_LDLIBS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
+          ORIG_MODULE=$(grep "LOCAL_MODULE" "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
 
-          # Add And64InlineHook source to main module
-          sed -i '/^LOCAL_SRC_FILES/a LOCAL_SRC_FILES += And64InlineHook/And64InlineHook.cpp' "$JNI/Android.mk"
+          echo "Module:   $ORIG_MODULE"
+          echo "Sources:  $ORIG_SRC"
+          echo "CppFlags: $ORIG_CPPFLAGS"
+          echo "LdLibs:   $ORIG_LDLIBS"
 
-          echo "=== Android.mk AFTER patch ==="
+          # Rewrite Android.mk cleanly from scratch - no Dobby, no missing separators
+          printf 'LOCAL_PATH := $(call my-dir)\n' > "$JNI/Android.mk"
+          printf '\n' >> "$JNI/Android.mk"
+          printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
+          printf 'LOCAL_MODULE    := %s\n' "$ORIG_MODULE" >> "$JNI/Android.mk"
+          printf 'LOCAL_SRC_FILES := %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf 'LOCAL_CPPFLAGS  := %s\n' "$ORIG_CPPFLAGS" >> "$JNI/Android.mk"
+          printf 'LOCAL_LDLIBS    := %s\n' "$ORIG_LDLIBS" >> "$JNI/Android.mk"
+          printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
+
+          echo "=== New Android.mk ==="
           cat "$JNI/Android.mk"
 
-          # Replace any dobby.h includes with our shim
+          # Patch dobby.h includes to use our shim
           find "$JNI" -name "*.h" -o -name "*.cpp" | xargs grep -l "dobby.h" 2>/dev/null | while read f; do
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
             echo "Patched: $f"
