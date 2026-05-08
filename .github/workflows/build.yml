@@ -45,15 +45,12 @@ jobs:
             "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Setup And64InlineHook and Dobby shim
+      - name: Setup And64InlineHook and patch Android.mk
         run: |
           JNI="app/src/main/jni"
 
-          # Clone And64InlineHook - clean Android ARM64 hook lib, no macOS asm issues
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
-          # Create dobby_compat.h - maps DobbyHook API to And64InlineHook
-          # so existing menu.h code works without changes
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
           printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
           printf 'static inline int DobbyHook(void* addr, void* replace, void** orig) {\n' >> "$JNI/dobby_compat.h"
@@ -62,21 +59,24 @@ jobs:
           printf 'static inline int DobbyDestroy(void* addr) { return 0; }\n' >> "$JNI/dobby_compat.h"
           printf 'static inline void* DobbySymbolResolver(const char* img, const char* sym) { return nullptr; }\n' >> "$JNI/dobby_compat.h"
 
-          echo "dobby_compat.h created:"
-          cat "$JNI/dobby_compat.h"
-
-          # Patch Android.mk:
-          # 1. Remove Dobby static lib linkage
-          # 2. Add And64InlineHook source file
-          sed -i '/ldobby\|libdobby\|dobby_static\|STATIC_LIBRARIES.*dobby/d' "$JNI/Android.mk"
-          sed -i '/LOCAL_SRC_FILES/a\LOCAL_SRC_FILES += And64InlineHook/And64InlineHook.cpp' "$JNI/Android.mk"
-          echo "Android.mk after patch:"
+          echo "=== Android.mk BEFORE patch ==="
           cat "$JNI/Android.mk"
 
-          # Patch any dobby.h includes to use our shim instead
+          # Remove ALL Dobby-related lines from Android.mk
+          sed -i '/[Dd]obby/d' "$JNI/Android.mk"
+          sed -i '/PREBUILT_STATIC_LIBRARY/d' "$JNI/Android.mk"
+          sed -i '/libraries\//d' "$JNI/Android.mk"
+
+          # Add And64InlineHook source to main module
+          sed -i '/^LOCAL_SRC_FILES/a LOCAL_SRC_FILES += And64InlineHook/And64InlineHook.cpp' "$JNI/Android.mk"
+
+          echo "=== Android.mk AFTER patch ==="
+          cat "$JNI/Android.mk"
+
+          # Replace any dobby.h includes with our shim
           find "$JNI" -name "*.h" -o -name "*.cpp" | xargs grep -l "dobby.h" 2>/dev/null | while read f; do
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
-            echo "Patched dobby.h include in: $f"
+            echo "Patched: $f"
           done
 
       - name: Compile C++ to so
