@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install apktool + zipalign + apksigner
+      - name: Install tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq perl
@@ -23,7 +23,6 @@ jobs:
           echo "#!/bin/bash" | sudo tee /usr/local/bin/apktool > /dev/null
           echo "java -jar $(pwd)/apktool.jar \"\$@\"" | sudo tee -a /usr/local/bin/apktool > /dev/null
           sudo chmod +x /usr/local/bin/apktool
-          apktool --version
 
       - name: Set up Android NDK r26
         uses: nttld/setup-ndk@v1
@@ -32,30 +31,21 @@ jobs:
           ndk-version: r26d
           add-to-path: true
 
-      - name: Download base Minecraft APK from GitHub Release
+      - name: Download base Minecraft APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="${{ github.repository }}"
-          curl -s \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${REPO}/releases/tags/mc-base" \
-            > release_info.json
-
+          curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/releases/tags/mc-base" > release_info.json
           ASSET_ID=$(cat release_info.json | jq -r '.assets[0].id')
           ASSET_NAME=$(cat release_info.json | jq -r '.assets[0].name')
-          echo "Downloading: $ASSET_NAME (id: $ASSET_ID)"
-
-          curl -L \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/octet-stream" \
-            "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" \
-            -o base_mc.apk
-
+          echo "Downloading: $ASSET_NAME"
+          curl -L -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Build Dobby hooking library from source
+      - name: Build Dobby
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -65,18 +55,24 @@ jobs:
           git clone https://github.com/jmpews/Dobby --depth=1
           cd Dobby
 
+          echo "=== Patching OSMemory ==="
           FEAT=$(find . -name "os_arch_features.h" | head -1)
-          echo "Patching: $FEAT"
+          if [ -n "$FEAT" ]; then
+            sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
+            perl -i -0pe 's/if\s*\(\s*!?\s*OSMemory::SetPermission[^;]*?\)\s*\{[^}]*\}/\/\* stubbed \*\//gs' "$FEAT"
+            sed -i '/kReadExecute/d' "$FEAT"
+            grep -q "unistd.h" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
+            echo "OSMemory patch done"
+          fi
 
-          sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
-          perl -i -0pe 's/if\s*\(\s*!?\s*OSMemory::SetPermission[^;]*?\)\s*\{[^}]*\}/\/\* SetPermission stubbed \*\//gs' "$FEAT"
-          sed -i 's/,\s*kReadExecute\s*)/)/g' "$FEAT"
-          sed -i '/kReadExecute/d' "$FEAT"
-          grep -q "unistd.h" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
+          echo "=== Patching @PAGE/@PAGEOFF assembly ==="
+          find . \( -name "*.asm" -o -name "*.S" \) | while read f; do
+            perl -i -pe 's/(\w+)\@PAGE/$1/g' "$f"
+            perl -i -pe 's/(\w+)\@PAGEOFF/:lo12:$1/g' "$f"
+            echo "Patched: $f"
+          done
 
-          echo "Patched file preview:"
-          head -20 "$FEAT"
-
+          echo "=== Building arm64-v8a ==="
           cmake -B build_arm64 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -84,13 +80,13 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DPlugin.SymbolResolver=OFF \
             -DPlugin.Darwin.HideLibrary=OFF \
-            -DNearBranch=OFF \
             -DDOBBY_BUILD_KERNEL_MODE=OFF \
             -DDOBBY_BUILD_EXAMPLE=OFF \
             -DDOBBY_BUILD_TEST=OFF
           cmake --build build_arm64 -j$(nproc)
           cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
 
+          echo "=== Building armeabi-v7a ==="
           cmake -B build_arm32 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=armeabi-v7a \
@@ -98,14 +94,13 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DPlugin.SymbolResolver=OFF \
             -DPlugin.Darwin.HideLibrary=OFF \
-            -DNearBranch=OFF \
             -DDOBBY_BUILD_KERNEL_MODE=OFF \
             -DDOBBY_BUILD_EXAMPLE=OFF \
             -DDOBBY_BUILD_TEST=OFF
           cmake --build build_arm32 -j$(nproc)
           cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
 
-          echo "Dobby built:"
+          echo "Dobby done:"
           ls -lh ../app/src/main/jni/libraries/arm64-v8a/
 
       - name: Compile C++ to so
@@ -113,65 +108,41 @@ jobs:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cd app/src/main/jni
-          $NDK/ndk-build \
-            NDK_PROJECT_PATH=. \
-            APP_BUILD_SCRIPT=Android.mk \
-            APP_ABI="arm64-v8a armeabi-v7a" \
-            -j$(nproc)
-          echo "Compiled:"
+          $NDK/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk APP_ABI="arm64-v8a armeabi-v7a" -j$(nproc)
           find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
       - name: Inject so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
-
-          mkdir -p mc_decoded/lib/arm64-v8a
-          mkdir -p mc_decoded/lib/armeabi-v7a
-
-          cp libs/arm64-v8a/libManesClient.so  mc_decoded/lib/arm64-v8a/  2>/dev/null || \
-          cp app/src/main/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || true
-
-          cp libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || \
-          cp app/src/main/libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
-
+          mkdir -p mc_decoded/lib/arm64-v8a mc_decoded/lib/armeabi-v7a
+          cp libs/arm64-v8a/libManesClient.so  mc_decoded/lib/arm64-v8a/  2>/dev/null || true
+          cp libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
           apktool b mc_decoded -o ManesClient_unsigned.apk
           echo "Rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
-      - name: Align and sign APK
+      - name: Sign APK
         run: |
-          keytool -genkeypair -v \
-            -keystore manes.keystore \
-            -alias manes \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=ManesClient, OU=Mods, O=ManesClient, L=PH, S=NCR, C=PH" \
+          keytool -genkeypair -v -keystore manes.keystore -alias manes -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=ManesClient,O=ManesClient,C=PH" \
             -storepass manespass -keypass manespass 2>/dev/null
-
           zipalign -v 4 ManesClient_unsigned.apk ManesClient_aligned.apk
+          apksigner sign --ks manes.keystore --ks-key-alias manes \
+            --ks-pass pass:manespass --key-pass pass:manespass \
+            --out ManesClient_v2.apk ManesClient_aligned.apk
+          echo "Signed: $(du -sh ManesClient_v2.apk | cut -f1)"
 
-          apksigner sign \
-            --ks manes.keystore \
-            --ks-key-alias manes \
-            --ks-pass pass:manespass \
-            --key-pass pass:manespass \
-            --out ManesClient_v2.apk \
-            ManesClient_aligned.apk
-
-          echo "Signed APK: $(du -sh ManesClient_v2.apk | cut -f1)"
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ManesClient-v2.0-MC26.20
           path: ManesClient_v2.apk
           retention-days: 30
 
-      - name: Create GitHub Release
+      - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0-${{ github.run_number }}
-          name: "ManesClient v2.0 MC 26.20 Build ${{ github.run_number }}"
-          body: "ManesClient v2.0 for Minecraft Bedrock 26.20"
+          name: "ManesClient v2.0 MC26.20 Build ${{ github.run_number }}"
           files: ManesClient_v2.apk
           token: ${{ secrets.GITHUB_TOKEN }}
