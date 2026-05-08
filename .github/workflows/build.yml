@@ -16,7 +16,7 @@ jobs:
       - name: Install apktool + zipalign + apksigner
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq python3
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq perl
 
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
@@ -65,47 +65,18 @@ jobs:
           git clone https://github.com/jmpews/Dobby --depth=1
           cd Dobby
 
-          # ── Patch os_arch_features.h using Python for proper nested-paren handling ──
           FEAT=$(find . -name "os_arch_features.h" | head -1)
           echo "Patching: $FEAT"
 
-          python3 << PYEOF
-import re
+          sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
+          perl -i -0pe 's/if\s*\(\s*!?\s*OSMemory::SetPermission[^;]*?\)\s*\{[^}]*\}/\/\* SetPermission stubbed \*\//gs' "$FEAT"
+          sed -i 's/,\s*kReadExecute\s*)/)/g' "$FEAT"
+          sed -i '/kReadExecute/d' "$FEAT"
+          grep -q "unistd.h" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
 
-with open("$FEAT", "r") as f:
-    content = f.read()
+          echo "Patched file preview:"
+          head -20 "$FEAT"
 
-# 1. Add missing system includes at top
-for inc in ["#include <unistd.h>", "#include <sys/mman.h>"]:
-    if inc not in content:
-        content = inc + "\n" + content
-
-# 2. Replace OSMemory::PageSize() -> sysconf(_SC_PAGESIZE)
-content = content.replace("OSMemory::PageSize()", "sysconf(_SC_PAGESIZE)")
-
-# 3. Replace entire if(!OSMemory::SetPermission(...)){...} block with no-op
-#    Handles nested parentheses properly
-content = re.sub(
-    r'if\s*\(\s*!?\s*OSMemory::SetPermission\s*\(.*?\)\s*\)\s*\{[^}]*\}',
-    '/* OSMemory::SetPermission stubbed out */',
-    content,
-    flags=re.DOTALL
-)
-
-# 4. Remove any leftover kReadExecute references on their own
-content = re.sub(r',\s*kReadExecute\s*\)', ')', content)
-
-with open("$FEAT", "w") as f:
-    f.write(content)
-
-print("Patch applied successfully")
-PYEOF
-
-          echo "--- Patched file ---"
-          cat "$FEAT"
-          echo "--------------------"
-
-          # ── Build arm64-v8a ───────────────────────────────────────────────
           cmake -B build_arm64 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -119,7 +90,6 @@ PYEOF
           cmake --build build_arm64 -j$(nproc)
           cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
 
-          # ── Build armeabi-v7a ─────────────────────────────────────────────
           cmake -B build_arm32 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=armeabi-v7a \
@@ -133,11 +103,10 @@ PYEOF
           cmake --build build_arm32 -j$(nproc)
           cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
 
-          echo "✅ Dobby built:"
+          echo "Dobby built:"
           ls -lh ../app/src/main/jni/libraries/arm64-v8a/
-          ls -lh ../app/src/main/jni/libraries/armeabi-v7a/
 
-      - name: Compile C++ → .so
+      - name: Compile C++ to so
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -150,7 +119,7 @@ PYEOF
           echo "Compiled:"
           find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
-      - name: Inject .so into APK
+      - name: Inject so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
 
@@ -186,7 +155,7 @@ PYEOF
             --out ManesClient_v2.apk \
             ManesClient_aligned.apk
 
-          echo "✅ Signed APK: $(du -sh ManesClient_v2.apk | cut -f1)"
+          echo "Signed APK: $(du -sh ManesClient_v2.apk | cut -f1)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -200,10 +169,7 @@ PYEOF
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0-${{ github.run_number }}
-          name: "ManesClient v2.0 — MC 26.20 (Build #${{ github.run_number }})"
-          body: |
-            ManesClient v2.0 for Minecraft Bedrock 26.20
-            - Custom Crosshair, Velocity, Anti-AFK, Scaffold, Tower
-            - Auto Armor, Reach HUD, ESP Health Bars, Theme Picker
+          name: "ManesClient v2.0 MC 26.20 Build ${{ github.run_number }}"
+          body: "ManesClient v2.0 for Minecraft Bedrock 26.20"
           files: ManesClient_v2.apk
           token: ${{ secrets.GITHUB_TOKEN }}
