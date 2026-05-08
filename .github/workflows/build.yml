@@ -3,30 +3,28 @@ name: Build ManesClient APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:   # lets you trigger a build manually from your phone browser
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Grab your code ───────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Install build tools ──────────────────────────────────────────
       - name: Install apktool + zipalign + apksigner
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake
 
-          # Download apktool latest
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
-          echo '#!/bin/bash\njava -jar '"$(pwd)/apktool.jar"' "$@"' | sudo tee /usr/local/bin/apktool > /dev/null
+          echo "#!/bin/bash" | sudo tee /usr/local/bin/apktool > /dev/null
+          echo "java -jar $(pwd)/apktool.jar \"\$@\"" | sudo tee -a /usr/local/bin/apktool > /dev/null
           sudo chmod +x /usr/local/bin/apktool
+          apktool --version
 
-      # ── 3. Set up Android NDK ───────────────────────────────────────────
       - name: Set up Android NDK r26
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -34,16 +32,49 @@ jobs:
           ndk-version: r26d
           add-to-path: true
 
-      # ── 4. Decode the base Minecraft APK ────────────────────────────────
-      #    You upload your MC 26.20 base.apk as a GitHub secret (base64 encoded).
-      #    See README_SETUP.md for exact steps.
-      - name: Decode base Minecraft APK
+      - name: Download base Minecraft APK
         run: |
-          echo "${{ secrets.MC_APK_BASE64 }}" | base64 -d > base_mc.apk
-          echo "✅ MC APK decoded ($(du -sh base_mc.apk | cut -f1))"
+          wget -q "${{ secrets.MC_APK_URL }}" -O base_mc.apk
+          echo "Downloaded $(du -sh base_mc.apk | cut -f1)"
 
-      # ── 5. Compile libManesClient.so with NDK ───────────────────────────
-      - name: Compile C++ → .so (arm64-v8a)
+      - name: Build Dobby hooking library from source
+        env:
+          NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          mkdir -p app/src/main/jni/libraries/arm64-v8a
+          mkdir -p app/src/main/jni/libraries/armeabi-v7a
+
+          git clone https://github.com/jmpews/Dobby --depth=1
+          cd Dobby
+
+          # Build arm64-v8a
+          cmake -B build_arm64 \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPlugin.SymbolResolver=OFF \
+            -DPlugin.Darwin.HideLibrary=OFF
+          cmake --build build_arm64 -j$(nproc)
+          cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
+
+          # Build armeabi-v7a
+          cmake -B build_arm32 \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_PLATFORM=android-21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPlugin.SymbolResolver=OFF \
+            -DPlugin.Darwin.HideLibrary=OFF
+          cmake --build build_arm32 -j$(nproc)
+          cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
+
+          cd ..
+          echo "Dobby built successfully:"
+          ls -lh app/src/main/jni/libraries/arm64-v8a/
+          ls -lh app/src/main/jni/libraries/armeabi-v7a/
+
+      - name: Compile C++ → .so
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -53,32 +84,27 @@ jobs:
             APP_BUILD_SCRIPT=Android.mk \
             APP_ABI="arm64-v8a armeabi-v7a" \
             -j$(nproc)
-          echo "✅ Compiled:"
-          ls -lh ../../../../libs/arm64-v8a/ ../../../../libs/armeabi-v7a/ 2>/dev/null || true
+          echo "Compiled .so files:"
+          find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
-      # ── 6. Inject .so into the APK ──────────────────────────────────────
-      - name: Decode + inject .so into APK
+      - name: Inject .so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
-          
-          # Inject arm64-v8a
+
           mkdir -p mc_decoded/lib/arm64-v8a
-          cp app/src/main/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || \
-          cp libs/arm64-v8a/libManesClient.so              mc_decoded/lib/arm64-v8a/ 2>/dev/null || true
-
-          # Inject armeabi-v7a (older devices)
           mkdir -p mc_decoded/lib/armeabi-v7a
-          cp app/src/main/libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || \
-          cp libs/armeabi-v7a/libManesClient.so               mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
 
-          # Rebuild
+          cp libs/arm64-v8a/libManesClient.so  mc_decoded/lib/arm64-v8a/  2>/dev/null || \
+          cp app/src/main/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || true
+
+          cp libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || \
+          cp app/src/main/libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
+
           apktool b mc_decoded -o ManesClient_unsigned.apk
-          echo "✅ APK rebuilt"
+          echo "APK rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
-      # ── 7. Align + sign ─────────────────────────────────────────────────
       - name: Align and sign APK
         run: |
-          # Generate a debug keystore (change details for release)
           keytool -genkeypair -v \
             -keystore manes.keystore \
             -alias manes \
@@ -97,10 +123,8 @@ jobs:
             --out ManesClient_v2.apk \
             ManesClient_aligned.apk
 
-          echo "✅ Signed APK:"
-          ls -lh ManesClient_v2.apk
+          echo "Final APK: $(du -sh ManesClient_v2.apk | cut -f1)"
 
-      # ── 8. Upload as downloadable artifact ──────────────────────────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -108,7 +132,6 @@ jobs:
           path: ManesClient_v2.apk
           retention-days: 30
 
-      # ── 9. Optional: also create a GitHub Release ────────────────────────
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -116,18 +139,8 @@ jobs:
           tag_name: v2.0-${{ github.run_number }}
           name: "ManesClient v2.0 — MC 26.20 (Build #${{ github.run_number }})"
           body: |
-            🎮 **ManesClient v2.0** for Minecraft Bedrock 26.20
-            
-            **New in v2.0:**
-            - Custom Crosshair (6 styles, rainbow, outline)
-            - Velocity (knockback reduction)
-            - Anti-AFK
-            - Scaffold + Tower
-            - Auto Armor
-            - Reach Display HUD
-            - ESP Health Bars
-            - Theme Picker (8 presets + custom + rainbow)
-            
-            ⚠️ Uninstall original Minecraft first, then install this.
+            ManesClient v2.0 for Minecraft Bedrock 26.20
+            - Custom Crosshair, Velocity, Anti-AFK, Scaffold, Tower
+            - Auto Armor, Reach HUD, ESP Health Bars, Theme Picker
           files: ManesClient_v2.apk
           token: ${{ secrets.GITHUB_TOKEN }}
