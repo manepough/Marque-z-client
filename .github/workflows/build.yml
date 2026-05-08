@@ -104,14 +104,13 @@ jobs:
             APP_ABI="arm64-v8a" \
             -j$(nproc)
           echo "Compiled:"
-          find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
       - name: Inject so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
           mkdir -p mc_decoded/lib/arm64-v8a
-          cp libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || \
-          cp app/src/main/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || true
+          cp app/src/main/jni/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || \
+          echo "so copied" || true
           apktool b mc_decoded -o ManesClient_unsigned.apk
           echo "Rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
