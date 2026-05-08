@@ -16,14 +16,13 @@ jobs:
       - name: Install apktool + zipalign + apksigner
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl python3-pip
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl
 
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
           echo "#!/bin/bash" | sudo tee /usr/local/bin/apktool > /dev/null
           echo "java -jar $(pwd)/apktool.jar \"\$@\"" | sudo tee -a /usr/local/bin/apktool > /dev/null
           sudo chmod +x /usr/local/bin/apktool
-          pip install gdown -q
           apktool --version
 
       - name: Set up Android NDK r26
@@ -33,23 +32,24 @@ jobs:
           ndk-version: r26d
           add-to-path: true
 
-      - name: Download base Minecraft APK (Google Drive bypass)
+      - name: Download base Minecraft APK from GitHub Release
         run: |
-          URL="${{ secrets.MC_APK_URL }}"
+          # Downloads the APK you uploaded to your repo's Releases (mc-base tag)
+          REPO="${{ github.repository }}"
+          curl -L \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/${REPO}/releases/tags/mc-base" \
+            -o release_info.json
 
-          # Extract file ID from share link or direct link
-          FILE_ID=$(echo "$URL" | grep -oP '(?<=/d/)[^/?]+' | head -1)
-          if [ -z "$FILE_ID" ]; then
-            FILE_ID=$(echo "$URL" | grep -oP '(?<=id=)[^&]+' | head -1)
-          fi
+          # Get the APK download URL from release assets
+          APK_URL=$(cat release_info.json | grep -o '"browser_download_url":"[^"]*\.apk"' | head -1 | cut -d'"' -f4)
+          echo "APK URL: $APK_URL"
 
-          if [ -n "$FILE_ID" ]; then
-            echo "Google Drive file ID: $FILE_ID"
-            gdown "https://drive.google.com/uc?id=${FILE_ID}" -O base_mc.apk
-          else
-            echo "Using URL directly..."
-            wget --no-check-certificate -q "$URL" -O base_mc.apk
-          fi
+          curl -L \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "$APK_URL" \
+            -o base_mc.apk
 
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
           file base_mc.apk
