@@ -16,13 +16,14 @@ jobs:
       - name: Install apktool + zipalign + apksigner
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl python3-pip
 
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
           echo "#!/bin/bash" | sudo tee /usr/local/bin/apktool > /dev/null
           echo "java -jar $(pwd)/apktool.jar \"\$@\"" | sudo tee -a /usr/local/bin/apktool > /dev/null
           sudo chmod +x /usr/local/bin/apktool
+          pip install gdown -q
           apktool --version
 
       - name: Set up Android NDK r26
@@ -32,10 +33,26 @@ jobs:
           ndk-version: r26d
           add-to-path: true
 
-      - name: Download base Minecraft APK
+      - name: Download base Minecraft APK (Google Drive bypass)
         run: |
-          wget -q "${{ secrets.MC_APK_URL }}" -O base_mc.apk
-          echo "Downloaded $(du -sh base_mc.apk | cut -f1)"
+          URL="${{ secrets.MC_APK_URL }}"
+
+          # Extract file ID from share link or direct link
+          FILE_ID=$(echo "$URL" | grep -oP '(?<=/d/)[^/?]+' | head -1)
+          if [ -z "$FILE_ID" ]; then
+            FILE_ID=$(echo "$URL" | grep -oP '(?<=id=)[^&]+' | head -1)
+          fi
+
+          if [ -n "$FILE_ID" ]; then
+            echo "Google Drive file ID: $FILE_ID"
+            gdown "https://drive.google.com/uc?id=${FILE_ID}" -O base_mc.apk --fuzzy
+          else
+            echo "Using URL directly..."
+            wget --no-check-certificate -q "$URL" -O base_mc.apk
+          fi
+
+          echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
+          file base_mc.apk
 
       - name: Build Dobby hooking library from source
         env:
@@ -47,7 +64,6 @@ jobs:
           git clone https://github.com/jmpews/Dobby --depth=1
           cd Dobby
 
-          # Build arm64-v8a
           cmake -B build_arm64 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -58,7 +74,6 @@ jobs:
           cmake --build build_arm64 -j$(nproc)
           cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
 
-          # Build armeabi-v7a
           cmake -B build_arm32 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=armeabi-v7a \
@@ -69,10 +84,8 @@ jobs:
           cmake --build build_arm32 -j$(nproc)
           cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
 
-          cd ..
-          echo "Dobby built successfully:"
-          ls -lh app/src/main/jni/libraries/arm64-v8a/
-          ls -lh app/src/main/jni/libraries/armeabi-v7a/
+          echo "Dobby built:"
+          ls -lh ../app/src/main/jni/libraries/arm64-v8a/
 
       - name: Compile C++ → .so
         env:
@@ -84,7 +97,7 @@ jobs:
             APP_BUILD_SCRIPT=Android.mk \
             APP_ABI="arm64-v8a armeabi-v7a" \
             -j$(nproc)
-          echo "Compiled .so files:"
+          echo "Compiled:"
           find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
       - name: Inject .so into APK
@@ -101,7 +114,7 @@ jobs:
           cp app/src/main/libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
 
           apktool b mc_decoded -o ManesClient_unsigned.apk
-          echo "APK rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
+          echo "Rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
       - name: Align and sign APK
         run: |
@@ -123,7 +136,7 @@ jobs:
             --out ManesClient_v2.apk \
             ManesClient_aligned.apk
 
-          echo "Final APK: $(du -sh ManesClient_v2.apk | cut -f1)"
+          echo "Signed APK: $(du -sh ManesClient_v2.apk | cut -f1)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
