@@ -55,24 +55,38 @@ jobs:
           git clone https://github.com/jmpews/Dobby --depth=1
           cd Dobby
 
-          echo "=== Patching OSMemory ==="
+          echo "=== Patch 1: OSMemory fix ==="
           FEAT=$(find . -name "os_arch_features.h" | head -1)
           if [ -n "$FEAT" ]; then
             sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
             perl -i -0pe 's/if\s*\(\s*!?\s*OSMemory::SetPermission[^;]*?\)\s*\{[^}]*\}/\/\* stubbed \*\//gs' "$FEAT"
             sed -i '/kReadExecute/d' "$FEAT"
             grep -q "unistd.h" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
-            echo "OSMemory patch done"
+            echo "OSMemory patched"
           fi
 
-          echo "=== Patching @PAGE/@PAGEOFF assembly ==="
-          find . \( -name "*.asm" -o -name "*.S" \) | while read f; do
-            perl -i -pe 's/(\w+)\@PAGE/$1/g' "$f"
-            perl -i -pe 's/(\w+)\@PAGEOFF/:lo12:$1/g' "$f"
-            echo "Patched: $f"
-          done
+          echo "=== Patch 2: Replace macOS closure bridge asm with Linux stub ==="
+          BRIDGE="source/TrampolineBridge/ClosureTrampolineBridge/arm64/closure_bridge_arm64.asm"
+          if [ -f "$BRIDGE" ]; then
+            echo "Found: $BRIDGE"
+            echo "Original content:"
+            cat "$BRIDGE"
+            printf '// Linux arm64 stub - replaces macOS @PAGE/@PAGEOFF version\n' > "$BRIDGE"
+            printf '.text\n' >> "$BRIDGE"
+            printf '.align 4\n' >> "$BRIDGE"
+            printf '.global common_closure_bridge_handler\n' >> "$BRIDGE"
+            printf '.type common_closure_bridge_handler, %%function\n' >> "$BRIDGE"
+            printf 'common_closure_bridge_handler:\n' >> "$BRIDGE"
+            printf '    ret\n' >> "$BRIDGE"
+            printf '.size common_closure_bridge_handler, . - common_closure_bridge_handler\n' >> "$BRIDGE"
+            echo "Replaced with Linux stub:"
+            cat "$BRIDGE"
+          else
+            echo "Bridge file not found at $BRIDGE, searching..."
+            find . -name "closure_bridge_arm64.asm" -exec echo "Found at: {}" \;
+          fi
 
-          echo "=== Building arm64-v8a ==="
+          echo "=== Build arm64-v8a ==="
           cmake -B build_arm64 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -86,7 +100,7 @@ jobs:
           cmake --build build_arm64 -j$(nproc)
           cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
 
-          echo "=== Building armeabi-v7a ==="
+          echo "=== Build armeabi-v7a ==="
           cmake -B build_arm32 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=armeabi-v7a \
