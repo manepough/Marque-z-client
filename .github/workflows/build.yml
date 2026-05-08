@@ -81,7 +81,7 @@ jobs:
           printf 'LOCAL_MODULE    := %s\n' "$ORIG_MODULE" >> "$JNI/Android.mk"
           printf 'LOCAL_SRC_FILES := %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
           printf 'LOCAL_CPPFLAGS  := %s\n' "$ORIG_CPPFLAGS" >> "$JNI/Android.mk"
-          printf 'LOCAL_LDLIBS    := %s\n' "$ORIG_LDLIBS" >> "$JNI/Android.mk"
+          printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3\n' "$ORIG_LDLIBS" >> "$JNI/Android.mk"
           printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
 
           echo "=== New Android.mk ==="
