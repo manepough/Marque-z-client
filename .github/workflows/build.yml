@@ -16,7 +16,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq perl
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq
 
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
@@ -45,99 +45,67 @@ jobs:
             "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Build Dobby
-        env:
-          NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Setup And64InlineHook and Dobby shim
         run: |
-          mkdir -p app/src/main/jni/libraries/arm64-v8a
-          mkdir -p app/src/main/jni/libraries/armeabi-v7a
+          JNI="app/src/main/jni"
 
-          git clone https://github.com/jmpews/Dobby --depth=1
-          cd Dobby
+          # Clone And64InlineHook - clean Android ARM64 hook lib, no macOS asm issues
+          git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
-          echo "=== Patch 1: OSMemory fix ==="
-          FEAT=$(find . -name "os_arch_features.h" | head -1)
-          if [ -n "$FEAT" ]; then
-            sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
-            perl -i -0pe 's/if\s*\(\s*!?\s*OSMemory::SetPermission[^;]*?\)\s*\{[^}]*\}/\/\* stubbed \*\//gs' "$FEAT"
-            sed -i '/kReadExecute/d' "$FEAT"
-            grep -q "unistd.h" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
-            echo "OSMemory patched"
-          fi
+          # Create dobby_compat.h - maps DobbyHook API to And64InlineHook
+          # so existing menu.h code works without changes
+          printf '#pragma once\n' > "$JNI/dobby_compat.h"
+          printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline int DobbyHook(void* addr, void* replace, void** orig) {\n' >> "$JNI/dobby_compat.h"
+          printf '    return A64HookFunction(addr, replace, orig) ? 0 : -1;\n' >> "$JNI/dobby_compat.h"
+          printf '}\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline int DobbyDestroy(void* addr) { return 0; }\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline void* DobbySymbolResolver(const char* img, const char* sym) { return nullptr; }\n' >> "$JNI/dobby_compat.h"
 
-          echo "=== Patch 2: Replace macOS closure bridge asm with Linux stub ==="
-          BRIDGE="source/TrampolineBridge/ClosureTrampolineBridge/arm64/closure_bridge_arm64.asm"
-          if [ -f "$BRIDGE" ]; then
-            echo "Found: $BRIDGE"
-            echo "Original content:"
-            cat "$BRIDGE"
-            printf '// Linux arm64 stub - replaces macOS @PAGE/@PAGEOFF version\n' > "$BRIDGE"
-            printf '.text\n' >> "$BRIDGE"
-            printf '.align 4\n' >> "$BRIDGE"
-            printf '.global common_closure_bridge_handler\n' >> "$BRIDGE"
-            printf '.type common_closure_bridge_handler, %%function\n' >> "$BRIDGE"
-            printf 'common_closure_bridge_handler:\n' >> "$BRIDGE"
-            printf '    ret\n' >> "$BRIDGE"
-            printf '.size common_closure_bridge_handler, . - common_closure_bridge_handler\n' >> "$BRIDGE"
-            echo "Replaced with Linux stub:"
-            cat "$BRIDGE"
-          else
-            echo "Bridge file not found at $BRIDGE, searching..."
-            find . -name "closure_bridge_arm64.asm" -exec echo "Found at: {}" \;
-          fi
+          echo "dobby_compat.h created:"
+          cat "$JNI/dobby_compat.h"
 
-          echo "=== Build arm64-v8a ==="
-          cmake -B build_arm64 \
-            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-21 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPlugin.SymbolResolver=OFF \
-            -DPlugin.Darwin.HideLibrary=OFF \
-            -DDOBBY_BUILD_KERNEL_MODE=OFF \
-            -DDOBBY_BUILD_EXAMPLE=OFF \
-            -DDOBBY_BUILD_TEST=OFF
-          cmake --build build_arm64 -j$(nproc)
-          cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
+          # Patch Android.mk:
+          # 1. Remove Dobby static lib linkage
+          # 2. Add And64InlineHook source file
+          sed -i '/ldobby\|libdobby\|dobby_static\|STATIC_LIBRARIES.*dobby/d' "$JNI/Android.mk"
+          sed -i '/LOCAL_SRC_FILES/a\LOCAL_SRC_FILES += And64InlineHook/And64InlineHook.cpp' "$JNI/Android.mk"
+          echo "Android.mk after patch:"
+          cat "$JNI/Android.mk"
 
-          echo "=== Build armeabi-v7a ==="
-          cmake -B build_arm32 \
-            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-21 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPlugin.SymbolResolver=OFF \
-            -DPlugin.Darwin.HideLibrary=OFF \
-            -DDOBBY_BUILD_KERNEL_MODE=OFF \
-            -DDOBBY_BUILD_EXAMPLE=OFF \
-            -DDOBBY_BUILD_TEST=OFF
-          cmake --build build_arm32 -j$(nproc)
-          cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
-
-          echo "Dobby done:"
-          ls -lh ../app/src/main/jni/libraries/arm64-v8a/
+          # Patch any dobby.h includes to use our shim instead
+          find "$JNI" -name "*.h" -o -name "*.cpp" | xargs grep -l "dobby.h" 2>/dev/null | while read f; do
+            sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
+            echo "Patched dobby.h include in: $f"
+          done
 
       - name: Compile C++ to so
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cd app/src/main/jni
-          $NDK/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk APP_ABI="arm64-v8a armeabi-v7a" -j$(nproc)
+          $NDK/ndk-build \
+            NDK_PROJECT_PATH=. \
+            APP_BUILD_SCRIPT=Android.mk \
+            APP_ABI="arm64-v8a" \
+            -j$(nproc)
+          echo "Compiled:"
           find ../../../../libs -name "*.so" -exec ls -lh {} \;
 
       - name: Inject so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
-          mkdir -p mc_decoded/lib/arm64-v8a mc_decoded/lib/armeabi-v7a
-          cp libs/arm64-v8a/libManesClient.so  mc_decoded/lib/arm64-v8a/  2>/dev/null || true
-          cp libs/armeabi-v7a/libManesClient.so mc_decoded/lib/armeabi-v7a/ 2>/dev/null || true
+          mkdir -p mc_decoded/lib/arm64-v8a
+          cp libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || \
+          cp app/src/main/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || true
           apktool b mc_decoded -o ManesClient_unsigned.apk
           echo "Rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
       - name: Sign APK
         run: |
-          keytool -genkeypair -v -keystore manes.keystore -alias manes -keyalg RSA -keysize 2048 \
-            -validity 10000 -dname "CN=ManesClient,O=ManesClient,C=PH" \
+          keytool -genkeypair -v -keystore manes.keystore -alias manes \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=ManesClient,O=ManesClient,C=PH" \
             -storepass manespass -keypass manespass 2>/dev/null
           zipalign -v 4 ManesClient_unsigned.apk ManesClient_aligned.apk
           apksigner sign --ks manes.keystore --ks-key-alias manes \
