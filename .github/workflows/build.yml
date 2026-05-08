@@ -37,21 +37,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="${{ github.repository }}"
-
-          echo "Fetching release info for mc-base tag..."
           curl -s \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${REPO}/releases/tags/mc-base" \
             > release_info.json
 
-          echo "Assets found:"
-          cat release_info.json | jq '.assets[] | {name: .name, url: .url, size: .size}'
-
-          # Get the first asset's API URL (works regardless of file extension)
           ASSET_ID=$(cat release_info.json | jq -r '.assets[0].id')
           ASSET_NAME=$(cat release_info.json | jq -r '.assets[0].name')
-          echo "Downloading asset: $ASSET_NAME (id: $ASSET_ID)"
+          echo "Downloading: $ASSET_NAME (id: $ASSET_ID)"
 
           curl -L \
             -H "Authorization: Bearer $GH_TOKEN" \
@@ -60,7 +54,6 @@ jobs:
             -o base_mc.apk
 
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
-          file base_mc.apk
 
       - name: Build Dobby hooking library from source
         env:
@@ -72,28 +65,49 @@ jobs:
           git clone https://github.com/jmpews/Dobby --depth=1
           cd Dobby
 
+          # ── Fix: OSMemory not available in all NDK r26 configs ────────────
+          # Replace OSMemory::PageSize() with POSIX sysconf equivalent
+          # and stub out SetPermission (not needed for basic hooking)
+          FEAT=$(find . -name "os_arch_features.h" | head -1)
+          if [ -n "$FEAT" ]; then
+            echo "Patching $FEAT"
+            sed -i 's/OSMemory::PageSize()/sysconf(_SC_PAGESIZE)/g' "$FEAT"
+            sed -i 's/OSMemory::SetPermission([^)]*)/true/g' "$FEAT"
+            grep -q "#include <unistd.h>" "$FEAT" || sed -i '1s/^/#include <unistd.h>\n/' "$FEAT"
+            grep -q "#include <sys/types.h>" "$FEAT" || sed -i '1s/^/#include <sys\/types.h>\n/' "$FEAT"
+          fi
+
+          # ── arm64-v8a ─────────────────────────────────────────────────────
           cmake -B build_arm64 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-21 \
             -DCMAKE_BUILD_TYPE=Release \
             -DPlugin.SymbolResolver=OFF \
-            -DPlugin.Darwin.HideLibrary=OFF
+            -DPlugin.Darwin.HideLibrary=OFF \
+            -DDOBBY_BUILD_KERNEL_MODE=OFF \
+            -DDOBBY_BUILD_EXAMPLE=OFF \
+            -DDOBBY_BUILD_TEST=OFF
           cmake --build build_arm64 -j$(nproc)
           cp build_arm64/libdobby.a ../app/src/main/jni/libraries/arm64-v8a/libdobby.a
 
+          # ── armeabi-v7a ───────────────────────────────────────────────────
           cmake -B build_arm32 \
             -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=armeabi-v7a \
             -DANDROID_PLATFORM=android-21 \
             -DCMAKE_BUILD_TYPE=Release \
             -DPlugin.SymbolResolver=OFF \
-            -DPlugin.Darwin.HideLibrary=OFF
+            -DPlugin.Darwin.HideLibrary=OFF \
+            -DDOBBY_BUILD_KERNEL_MODE=OFF \
+            -DDOBBY_BUILD_EXAMPLE=OFF \
+            -DDOBBY_BUILD_TEST=OFF
           cmake --build build_arm32 -j$(nproc)
           cp build_arm32/libdobby.a ../app/src/main/jni/libraries/armeabi-v7a/libdobby.a
 
           echo "Dobby built:"
           ls -lh ../app/src/main/jni/libraries/arm64-v8a/
+          ls -lh ../app/src/main/jni/libraries/armeabi-v7a/
 
       - name: Compile C++ → .so
         env:
