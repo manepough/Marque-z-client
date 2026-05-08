@@ -45,7 +45,7 @@ jobs:
 
           if [ -n "$FILE_ID" ]; then
             echo "Google Drive file ID: $FILE_ID"
-            gdown "https://drive.google.com/uc?id=${FILE_ID}" -O base_mc.apk --fuzzy
+            gdown "https://drive.google.com/uc?id=${FILE_ID}" -O base_mc.apk
           else
             echo "Using URL directly..."
             wget --no-check-certificate -q "$URL" -O base_mc.apk
