@@ -16,7 +16,7 @@ jobs:
       - name: Install apktool + zipalign + apksigner
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl
+          sudo apt-get install -y zipalign apksigner openjdk-17-jdk wget unzip cmake curl jq
 
           APKTOOL_VER=$(curl -s https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | grep tag_name | cut -d '"' -f4)
           wget -q "https://github.com/iBotPeaches/Apktool/releases/download/${APKTOOL_VER}/apktool_${APKTOOL_VER#v}.jar" -O apktool.jar
@@ -33,22 +33,30 @@ jobs:
           add-to-path: true
 
       - name: Download base Minecraft APK from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Downloads the APK you uploaded to your repo's Releases (mc-base tag)
           REPO="${{ github.repository }}"
-          curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/octet-stream" \
+
+          echo "Fetching release info for mc-base tag..."
+          curl -s \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${REPO}/releases/tags/mc-base" \
-            -o release_info.json
+            > release_info.json
 
-          # Get the APK download URL from release assets
-          APK_URL=$(cat release_info.json | grep -o '"browser_download_url":"[^"]*\.apk"' | head -1 | cut -d'"' -f4)
-          echo "APK URL: $APK_URL"
+          echo "Assets found:"
+          cat release_info.json | jq '.assets[] | {name: .name, url: .url, size: .size}'
+
+          # Get the first asset's API URL (works regardless of file extension)
+          ASSET_ID=$(cat release_info.json | jq -r '.assets[0].id')
+          ASSET_NAME=$(cat release_info.json | jq -r '.assets[0].name')
+          echo "Downloading asset: $ASSET_NAME (id: $ASSET_ID)"
 
           curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "$APK_URL" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" \
             -o base_mc.apk
 
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
