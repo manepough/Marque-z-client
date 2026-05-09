@@ -48,29 +48,12 @@ jobs:
       - name: Setup hooks and patch files
         run: |
           JNI="app/src/main/jni"
+
+          # And64InlineHook
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
-          # Clone ImGui (needed for render_hook.h)
-          git clone https://github.com/ocornut/imgui --depth=1 "$JNI/imgui_src"
-          mkdir -p "$JNI/imgui/backends"
-          cp "$JNI/imgui_src/imgui.h"          "$JNI/imgui/"
-          cp "$JNI/imgui_src/imgui.cpp"        "$JNI/imgui/"
-          cp "$JNI/imgui_src/imgui_draw.cpp"   "$JNI/imgui/"
-          cp "$JNI/imgui_src/imgui_widgets.cpp" "$JNI/imgui/"
-          cp "$JNI/imgui_src/imgui_tables.cpp"  "$JNI/imgui/"
-          cp "$JNI/imgui_src/imgui_internal.h"  "$JNI/imgui/"
-          cp "$JNI/imgui_src/imconfig.h"         "$JNI/imgui/"
-          cp "$JNI/imgui_src/imstb_rectpack.h"  "$JNI/imgui/"
-          cp "$JNI/imgui_src/imstb_textedit.h"  "$JNI/imgui/"
-          cp "$JNI/imgui_src/imstb_truetype.h"  "$JNI/imgui/"
-          cp "$JNI/imgui_src/backends/imgui_impl_opengl3.h"   "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imgui.h"                          "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imconfig.h"                       "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imgui_internal.h"                "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imstb_rectpack.h"               "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imstb_textedit.h"               "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/imstb_truetype.h"               "$JNI/imgui/backends/"
-          cp "$JNI/imgui_src/backends/imgui_impl_opengl3.cpp" "$JNI/imgui/backends/"
+          # ImGui — clone into imgui/ flat (NO subfolders with duplicates)
+          git clone https://github.com/ocornut/imgui --depth=1 "$JNI/imgui"
 
           # Dobby shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
@@ -84,34 +67,32 @@ jobs:
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
           done
 
-          # Patch menu.h: replace old menuOpen checks
+          # Patch menu.h menuOpen references
           sed -i 's/if (menuOpen)/if (FloatingButton::menuOpen)/g'   "$JNI/menu.h"
           sed -i 's/if (!menuOpen)/if (!FloatingButton::menuOpen)/g' "$JNI/menu.h"
 
-          # Remove old eglSwapBuffers hook if present (main.cpp handles it now)
-          grep -q "initRenderHook\|eglSwapBuffers\|hook_eglSwap" "$JNI/menu.h" && \
-            echo "WARNING: menu.h has old render hook — main.cpp will override it"
-
-          echo "Files in JNI:"
-          ls "$JNI/"
-
-          # Rebuild Android.mk to include main.cpp + And64InlineHook
+          # Build Android.mk from scratch
+          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
           ORIG_FLAGS=$(grep "LOCAL_CPPFLAGS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
           ORIG_LIBS=$(grep  "LOCAL_LDLIBS"   "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
           ORIG_MOD=$(grep   "LOCAL_MODULE"   "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
 
-          # Find all .cpp source files (excluding dobby/libraries paths)
-          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
-
           printf 'LOCAL_PATH := $(call my-dir)\n\n' > "$JNI/Android.mk"
           printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
           printf 'LOCAL_MODULE    := %s\n' "$ORIG_MOD" >> "$JNI/Android.mk"
-          printf 'LOCAL_SRC_FILES := main.cpp %s And64InlineHook/And64InlineHook.cpp imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_widgets.cpp imgui/imgui_tables.cpp imgui/backends/imgui_impl_opengl3.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf 'LOCAL_SRC_FILES := main.cpp %s \\\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf '    And64InlineHook/And64InlineHook.cpp \\\n' >> "$JNI/Android.mk"
+          printf '    imgui/imgui.cpp \\\n' >> "$JNI/Android.mk"
+          printf '    imgui/imgui_draw.cpp \\\n' >> "$JNI/Android.mk"
+          printf '    imgui/imgui_widgets.cpp \\\n' >> "$JNI/Android.mk"
+          printf '    imgui/imgui_tables.cpp \\\n' >> "$JNI/Android.mk"
+          printf '    imgui/backends/imgui_impl_opengl3.cpp\n' >> "$JNI/Android.mk"
+          printf 'LOCAL_C_INCLUDES := $(LOCAL_PATH)/imgui $(LOCAL_PATH)\n' >> "$JNI/Android.mk"
           printf 'LOCAL_CPPFLAGS  := %s -std=c++17\n' "$ORIG_FLAGS" >> "$JNI/Android.mk"
           printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3 -ldl\n' "$ORIG_LIBS" >> "$JNI/Android.mk"
           printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
 
-          echo "=== Final Android.mk ==="
+          echo "=== Android.mk ==="
           cat "$JNI/Android.mk"
 
       - name: Compile C++ to so
