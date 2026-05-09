@@ -50,6 +50,21 @@ jobs:
           JNI="app/src/main/jni"
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
+          # Clone ImGui (needed for render_hook.h)
+          git clone https://github.com/ocornut/imgui --depth=1 "$JNI/imgui_src"
+          mkdir -p "$JNI/imgui/backends"
+          cp "$JNI/imgui_src/imgui.h"          "$JNI/imgui/"
+          cp "$JNI/imgui_src/imgui.cpp"        "$JNI/imgui/"
+          cp "$JNI/imgui_src/imgui_draw.cpp"   "$JNI/imgui/"
+          cp "$JNI/imgui_src/imgui_widgets.cpp" "$JNI/imgui/"
+          cp "$JNI/imgui_src/imgui_tables.cpp"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/imgui_internal.h"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/imstb_rectpack.h"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/imstb_textedit.h"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/imstb_truetype.h"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/backends/imgui_impl_opengl3.h"   "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/backends/imgui_impl_opengl3.cpp" "$JNI/imgui/backends/"
+
           # Dobby shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
           printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
@@ -84,7 +99,7 @@ jobs:
           printf 'LOCAL_PATH := $(call my-dir)\n\n' > "$JNI/Android.mk"
           printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
           printf 'LOCAL_MODULE    := %s\n' "$ORIG_MOD" >> "$JNI/Android.mk"
-          printf 'LOCAL_SRC_FILES := main.cpp %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf 'LOCAL_SRC_FILES := main.cpp %s And64InlineHook/And64InlineHook.cpp imgui/imgui.cpp imgui/imgui_draw.cpp imgui/imgui_widgets.cpp imgui/imgui_tables.cpp imgui/backends/imgui_impl_opengl3.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
           printf 'LOCAL_CPPFLAGS  := %s -std=c++17\n' "$ORIG_FLAGS" >> "$JNI/Android.mk"
           printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3 -ldl\n' "$ORIG_LIBS" >> "$JNI/Android.mk"
           printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
