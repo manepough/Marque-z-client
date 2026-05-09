@@ -64,6 +64,12 @@ jobs:
           cp "$JNI/imgui_src/imstb_textedit.h"  "$JNI/imgui/"
           cp "$JNI/imgui_src/imstb_truetype.h"  "$JNI/imgui/"
           cp "$JNI/imgui_src/backends/imgui_impl_opengl3.h"   "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imgui.h"                          "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imconfig.h"                       "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imgui_internal.h"                "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imstb_rectpack.h"               "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imstb_textedit.h"               "$JNI/imgui/backends/"
+          cp "$JNI/imgui_src/imstb_truetype.h"               "$JNI/imgui/backends/"
           cp "$JNI/imgui_src/backends/imgui_impl_opengl3.cpp" "$JNI/imgui/backends/"
 
           # Dobby shim
