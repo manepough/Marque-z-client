@@ -59,6 +59,7 @@ jobs:
           cp "$JNI/imgui_src/imgui_widgets.cpp" "$JNI/imgui/"
           cp "$JNI/imgui_src/imgui_tables.cpp"  "$JNI/imgui/"
           cp "$JNI/imgui_src/imgui_internal.h"  "$JNI/imgui/"
+          cp "$JNI/imgui_src/imconfig.h"         "$JNI/imgui/"
           cp "$JNI/imgui_src/imstb_rectpack.h"  "$JNI/imgui/"
           cp "$JNI/imgui_src/imstb_textedit.h"  "$JNI/imgui/"
           cp "$JNI/imgui_src/imstb_truetype.h"  "$JNI/imgui/"
