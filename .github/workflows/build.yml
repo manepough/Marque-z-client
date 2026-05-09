@@ -45,7 +45,7 @@ jobs:
             "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Setup hooks and patch menu
+      - name: Setup hooks and patch files
         run: |
           JNI="app/src/main/jni"
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
@@ -62,37 +62,31 @@ jobs:
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
           done
 
-          # Add new includes to menu.h (idempotent)
-          grep -q "stickfight.h"   "$JNI/menu.h" || sed -i '1s/^/#include "stickfight.h"\n/'   "$JNI/menu.h"
-          grep -q "floatingbutton" "$JNI/menu.h" || sed -i '1s/^/#include "floatingbutton.h"\n/' "$JNI/menu.h"
-          grep -q "modules.h"      "$JNI/menu.h" || sed -i '1s/^/#include "modules.h"\n/'        "$JNI/menu.h"
-
-          # Wire FloatingButton into render
-          grep -q "FloatingButton::render" "$JNI/menu.h" || \
-            sed -i 's/ImGui::NewFrame();/ImGui::NewFrame();\n        FloatingButton::render();/' "$JNI/menu.h"
-          grep -q "FloatingButton::init"   "$JNI/menu.h" || \
-            sed -i 's/ImGui_ImplOpenGL3_NewFrame();/FloatingButton::init(io.DisplaySize.x,io.DisplaySize.y);\n        ImGui_ImplOpenGL3_NewFrame();/' "$JNI/menu.h"
-
-          # Wire StickFight into background
-          grep -q "StickFight::render" "$JNI/menu.h" || \
-            sed -i 's/ImGui::Begin(/StickFight::render(ImGui::GetBackgroundDrawList(), 0, 0, io.DisplaySize.x, io.DisplaySize.y);\n        ImGui::Begin(/' "$JNI/menu.h"
-
-          # Replace menuOpen with FloatingButton::menuOpen
+          # Patch menu.h: replace old menuOpen checks
           sed -i 's/if (menuOpen)/if (FloatingButton::menuOpen)/g'   "$JNI/menu.h"
           sed -i 's/if (!menuOpen)/if (!FloatingButton::menuOpen)/g' "$JNI/menu.h"
 
-          # Rebuild Android.mk
-          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
+          # Remove old eglSwapBuffers hook if present (main.cpp handles it now)
+          grep -q "initRenderHook\|eglSwapBuffers\|hook_eglSwap" "$JNI/menu.h" && \
+            echo "WARNING: menu.h has old render hook — main.cpp will override it"
+
+          echo "Files in JNI:"
+          ls "$JNI/"
+
+          # Rebuild Android.mk to include main.cpp + And64InlineHook
           ORIG_FLAGS=$(grep "LOCAL_CPPFLAGS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
-          ORIG_LIBS=$(grep "LOCAL_LDLIBS"   "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
-          ORIG_MOD=$(grep "LOCAL_MODULE"    "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
+          ORIG_LIBS=$(grep  "LOCAL_LDLIBS"   "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
+          ORIG_MOD=$(grep   "LOCAL_MODULE"   "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
+
+          # Find all .cpp source files (excluding dobby/libraries paths)
+          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
 
           printf 'LOCAL_PATH := $(call my-dir)\n\n' > "$JNI/Android.mk"
           printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
           printf 'LOCAL_MODULE    := %s\n' "$ORIG_MOD" >> "$JNI/Android.mk"
-          printf 'LOCAL_SRC_FILES := %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
-          printf 'LOCAL_CPPFLAGS  := %s\n' "$ORIG_FLAGS" >> "$JNI/Android.mk"
-          printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3\n' "$ORIG_LIBS" >> "$JNI/Android.mk"
+          printf 'LOCAL_SRC_FILES := main.cpp %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf 'LOCAL_CPPFLAGS  := %s -std=c++17\n' "$ORIG_FLAGS" >> "$JNI/Android.mk"
+          printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3 -ldl\n' "$ORIG_LIBS" >> "$JNI/Android.mk"
           printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
 
           echo "=== Final Android.mk ==="
