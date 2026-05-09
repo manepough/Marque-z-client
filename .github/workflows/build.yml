@@ -45,53 +45,58 @@ jobs:
             "https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}" -o base_mc.apk
           echo "Downloaded: $(du -sh base_mc.apk | cut -f1)"
 
-      - name: Setup And64InlineHook and rebuild Android.mk
+      - name: Setup hooks and patch menu
         run: |
           JNI="app/src/main/jni"
-
           git clone https://github.com/Rprop/And64InlineHook --depth=1 "$JNI/And64InlineHook"
 
-          # Create Dobby compatibility shim
+          # Dobby shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
           printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
-          printf 'static inline int DobbyHook(void* addr, void* replace, void** orig) {\n' >> "$JNI/dobby_compat.h"
-          printf '    return A64HookFunction(addr, replace, orig) ? 0 : -1;\n' >> "$JNI/dobby_compat.h"
-          printf '}\n' >> "$JNI/dobby_compat.h"
-          printf 'static inline int DobbyDestroy(void* addr) { return 0; }\n' >> "$JNI/dobby_compat.h"
-          printf 'static inline void* DobbySymbolResolver(const char* img, const char* sym) { return nullptr; }\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline int DobbyHook(void* a,void* b,void** c){return A64HookFunction(a,b,c)?0:-1;}\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline int DobbyDestroy(void* a){return 0;}\n' >> "$JNI/dobby_compat.h"
+          printf 'static inline void* DobbySymbolResolver(const char* a,const char* b){return nullptr;}\n' >> "$JNI/dobby_compat.h"
 
-          echo "=== Original Android.mk ==="
-          cat "$JNI/Android.mk"
-
-          # Extract key values from original Android.mk before rewriting
-          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
-          ORIG_CPPFLAGS=$(grep "LOCAL_CPPFLAGS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
-          ORIG_LDLIBS=$(grep "LOCAL_LDLIBS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
-          ORIG_MODULE=$(grep "LOCAL_MODULE" "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
-
-          echo "Module:   $ORIG_MODULE"
-          echo "Sources:  $ORIG_SRC"
-          echo "CppFlags: $ORIG_CPPFLAGS"
-          echo "LdLibs:   $ORIG_LDLIBS"
-
-          # Rewrite Android.mk cleanly from scratch - no Dobby, no missing separators
-          printf 'LOCAL_PATH := $(call my-dir)\n' > "$JNI/Android.mk"
-          printf '\n' >> "$JNI/Android.mk"
-          printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
-          printf 'LOCAL_MODULE    := %s\n' "$ORIG_MODULE" >> "$JNI/Android.mk"
-          printf 'LOCAL_SRC_FILES := %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
-          printf 'LOCAL_CPPFLAGS  := %s\n' "$ORIG_CPPFLAGS" >> "$JNI/Android.mk"
-          printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3\n' "$ORIG_LDLIBS" >> "$JNI/Android.mk"
-          printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
-
-          echo "=== New Android.mk ==="
-          cat "$JNI/Android.mk"
-
-          # Patch dobby.h includes to use our shim
+          # Patch dobby.h includes
           find "$JNI" -name "*.h" -o -name "*.cpp" | xargs grep -l "dobby.h" 2>/dev/null | while read f; do
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
-            echo "Patched: $f"
           done
+
+          # Add new includes to menu.h (idempotent)
+          grep -q "stickfight.h"   "$JNI/menu.h" || sed -i '1s/^/#include "stickfight.h"\n/'   "$JNI/menu.h"
+          grep -q "floatingbutton" "$JNI/menu.h" || sed -i '1s/^/#include "floatingbutton.h"\n/' "$JNI/menu.h"
+          grep -q "modules.h"      "$JNI/menu.h" || sed -i '1s/^/#include "modules.h"\n/'        "$JNI/menu.h"
+
+          # Wire FloatingButton into render
+          grep -q "FloatingButton::render" "$JNI/menu.h" || \
+            sed -i 's/ImGui::NewFrame();/ImGui::NewFrame();\n        FloatingButton::render();/' "$JNI/menu.h"
+          grep -q "FloatingButton::init"   "$JNI/menu.h" || \
+            sed -i 's/ImGui_ImplOpenGL3_NewFrame();/FloatingButton::init(io.DisplaySize.x,io.DisplaySize.y);\n        ImGui_ImplOpenGL3_NewFrame();/' "$JNI/menu.h"
+
+          # Wire StickFight into background
+          grep -q "StickFight::render" "$JNI/menu.h" || \
+            sed -i 's/ImGui::Begin(/StickFight::render(ImGui::GetBackgroundDrawList(), 0, 0, io.DisplaySize.x, io.DisplaySize.y);\n        ImGui::Begin(/' "$JNI/menu.h"
+
+          # Replace menuOpen with FloatingButton::menuOpen
+          sed -i 's/if (menuOpen)/if (FloatingButton::menuOpen)/g'   "$JNI/menu.h"
+          sed -i 's/if (!menuOpen)/if (!FloatingButton::menuOpen)/g' "$JNI/menu.h"
+
+          # Rebuild Android.mk
+          ORIG_SRC=$(grep "^LOCAL_SRC_FILES" "$JNI/Android.mk" | grep -v "dobby\|libraries" | head -1 | cut -d= -f2- | xargs)
+          ORIG_FLAGS=$(grep "LOCAL_CPPFLAGS" "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
+          ORIG_LIBS=$(grep "LOCAL_LDLIBS"   "$JNI/Android.mk" | head -1 | cut -d= -f2- | xargs)
+          ORIG_MOD=$(grep "LOCAL_MODULE"    "$JNI/Android.mk" | grep -v "dobby" | head -1 | cut -d= -f2- | xargs)
+
+          printf 'LOCAL_PATH := $(call my-dir)\n\n' > "$JNI/Android.mk"
+          printf 'include $(CLEAR_VARS)\n' >> "$JNI/Android.mk"
+          printf 'LOCAL_MODULE    := %s\n' "$ORIG_MOD" >> "$JNI/Android.mk"
+          printf 'LOCAL_SRC_FILES := %s And64InlineHook/And64InlineHook.cpp\n' "$ORIG_SRC" >> "$JNI/Android.mk"
+          printf 'LOCAL_CPPFLAGS  := %s\n' "$ORIG_FLAGS" >> "$JNI/Android.mk"
+          printf 'LOCAL_LDLIBS    := %s -llog -landroid -lEGL -lGLESv3\n' "$ORIG_LIBS" >> "$JNI/Android.mk"
+          printf 'include $(BUILD_SHARED_LIBRARY)\n' >> "$JNI/Android.mk"
+
+          echo "=== Final Android.mk ==="
+          cat "$JNI/Android.mk"
 
       - name: Compile C++ to so
         env:
@@ -103,14 +108,13 @@ jobs:
             APP_BUILD_SCRIPT=Android.mk \
             APP_ABI="arm64-v8a" \
             -j$(nproc)
-          echo "Compiled:"
+          ls -lh libs/arm64-v8a/
 
       - name: Inject so into APK
         run: |
           apktool d base_mc.apk -o mc_decoded --no-res -f
           mkdir -p mc_decoded/lib/arm64-v8a
-          cp app/src/main/jni/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/ 2>/dev/null || \
-          echo "so copied" || true
+          cp app/src/main/jni/libs/arm64-v8a/libManesClient.so mc_decoded/lib/arm64-v8a/
           apktool b mc_decoded -o ManesClient_unsigned.apk
           echo "Rebuilt: $(du -sh ManesClient_unsigned.apk | cut -f1)"
 
@@ -124,7 +128,7 @@ jobs:
           apksigner sign --ks manes.keystore --ks-key-alias manes \
             --ks-pass pass:manespass --key-pass pass:manespass \
             --out ManesClient_v2.apk ManesClient_aligned.apk
-          echo "Signed: $(du -sh ManesClient_v2.apk | cut -f1)"
+          echo "Done: $(du -sh ManesClient_v2.apk | cut -f1)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -132,12 +136,3 @@ jobs:
           name: ManesClient-v2.0-MC26.20
           path: ManesClient_v2.apk
           retention-days: 30
-
-      - name: Create Release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.0-${{ github.run_number }}
-          name: "ManesClient v2.0 MC26.20 Build ${{ github.run_number }}"
-          files: ManesClient_v2.apk
-          token: ${{ secrets.GITHUB_TOKEN }}
