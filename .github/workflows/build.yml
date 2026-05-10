@@ -105,6 +105,17 @@ jobs:
           printf 'inline int  autoClickDelay      = 5;\n' >> "$VARS_INJECT"
           printf 'inline int  currentAutoClickTick= 0;\n' >> "$VARS_INJECT"
           printf 'inline bool canClick            = false;\n' >> "$VARS_INJECT"
+          printf 'inline int  maxAutoClickTick    = 5;\n' >> "$VARS_INJECT"
+          printf 'inline bool panic               = false;\n' >> "$VARS_INJECT"
+          printf 'static const unsigned char YoutubeIcon[]      = {0};\n' >> "$VARS_INJECT"
+          printf 'static const unsigned char TelegramIcon[]     = {0};\n' >> "$VARS_INJECT"
+          printf 'static const unsigned char DiscordIcon[]      = {0};\n' >> "$VARS_INJECT"
+          printf 'static const unsigned char AmethystShardIcon[]= {0};\n' >> "$VARS_INJECT"
+          printf '#include <GLES3/gl3.h>\n' >> "$VARS_INJECT"
+          printf 'static inline unsigned int CreateTextureFromMemoryPNG(const unsigned char* d, int s){return 0;}\n' >> "$VARS_INJECT"
+          # Also remove the icon-loading lines from menu.h that reference missing data
+          sed -i '/YoutubeIcon\|TelegramIcon\|DiscordIcon\|AmethystShardIcon\|CreateTextureFromMemoryPNG\|youtube_icon\|telegram_icon\|discord_icon\|amethyst_shard_icon/d' "$JNI/menu.h"
+
 
           # Include it at top of menu.h
           grep -q "vars_inject" "$JNI/menu.h" || sed -i "1s/^/#include \"vars_inject.h\"\n/" "$JNI/menu.h"
