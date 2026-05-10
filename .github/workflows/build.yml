@@ -55,6 +55,14 @@ jobs:
           # ImGui — clone into imgui/ flat (NO subfolders with duplicates)
           git clone https://github.com/ocornut/imgui --depth=1 "$JNI/imgui"
 
+          # Delete old MC-type-dependent files (replaced by modules.h)
+          rm -f "$JNI/scaffold.h" "$JNI/autoarmor.h" "$JNI/antiafk.h"
+
+          # Remove their includes from menu.h
+          sed -i '/#include.*scaffold\.h/d'  "$JNI/menu.h"
+          sed -i '/#include.*autoarmor\.h/d' "$JNI/menu.h"
+          sed -i '/#include.*antiafk\.h/d'   "$JNI/menu.h"
+
           # Dobby shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
           printf '#include "And64InlineHook/And64InlineHook.hpp"\n' >> "$JNI/dobby_compat.h"
