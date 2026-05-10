@@ -133,7 +133,9 @@ inline void setup() {
     void* fn = dlsym(egl, "eglSwapBuffers");
     if (!fn) { LOG("Failed to find eglSwapBuffers"); return; }
 
-    bool ok = A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)&orig);
+    A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)&orig);
+    bool ok = (orig != nullptr);orig);
+    bool ok = (orig != nullptr);
     LOG("eglSwapBuffers hook: %s", ok ? "SUCCESS" : "FAILED");
 }
 

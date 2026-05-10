@@ -59,7 +59,9 @@ inline void setup() {
     void* fn = dlsym(lib, "AInputQueue_getEvent");
     if (!fn) { TLOG("Failed to find AInputQueue_getEvent"); return; }
 
-    bool ok = A64HookFunction(fn, (void*)hook_getEvent, (void**)&orig_getEvent);
+    A64HookFunction(fn, (void*)hook_getEvent, (void**)A64HookFunction(fn, (void*)hook_getEvent, (void**)&orig_getEvent);
+    bool ok = (orig_getEvent != nullptr);orig_getEvent);
+    bool ok = (orig_getEvent != nullptr);
     TLOG("Touch hook: %s", ok ? "SUCCESS" : "FAILED");
 }
 
