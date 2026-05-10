@@ -75,6 +75,16 @@ jobs:
             sed -i 's|#include.*dobby\.h.*|#include "dobby_compat.h"|g' "$f"
           done
 
+
+          # Fix MC type forward declarations for modules that reference game types
+          for hdr in antiafk.h scaffold.h autoarmor.h; do
+            f="$JNI/$hdr"
+            if [ -f "$f" ] && ! grep -q "MC_TYPES_FWD" "$f"; then
+              sed -i '1s/^/#pragma once\n#include <string>\n#include <algorithm>\n#ifndef MC_TYPES_FWD\n#define MC_TYPES_FWD\nstruct LocalPlayer;\nstruct GameMode;\nstruct BlockSource;\nstruct Block;\nstruct Vec3 { float x, y, z; };\nstruct BlockPos { int x, y, z; };\nstruct ItemStack;\nstruct Container;\n#endif\n/' "$f"
+              echo "MC types patched: $f"
+            fi
+          done
+
           # Patch menu.h menuOpen references
           sed -i 's/if (menuOpen)/if (FloatingButton::menuOpen)/g'   "$JNI/menu.h"
           sed -i 's/if (!menuOpen)/if (!FloatingButton::menuOpen)/g' "$JNI/menu.h"
