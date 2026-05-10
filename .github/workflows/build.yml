@@ -62,6 +62,8 @@ jobs:
           sed -i '/#include.*scaffold\.h/d'  "$JNI/menu.h"
           sed -i '/#include.*autoarmor\.h/d' "$JNI/menu.h"
           sed -i '/#include.*antiafk\.h/d'   "$JNI/menu.h"
+          sed -i '/#include.*Images/d'       "$JNI/menu.h"
+          sed -i '/#include.*YT\.h/d'           "$JNI/menu.h"
 
           # Dobby shim
           printf '#pragma once\n' > "$JNI/dobby_compat.h"
