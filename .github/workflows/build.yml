@@ -128,6 +128,41 @@ jobs:
           printf 'static inline void RenderOreESP(ImDrawList*,float*,float,float*){}\n' >> "$VARS_INJECT"
           printf 'static inline void RenderDeathPosition(ImDrawList*,float*,float,float*){}\n' >> "$VARS_INJECT"
           printf 'static inline void RenderHudExtras(float,float){}\n' >> "$VARS_INJECT"
+          # ── Movement variables ──────────────────────────────────────────
+          printf 'inline float waterSpeedValue=1.0f,lavaSpeedValue=1.0f;\n' >> "$VARS_INJECT"
+          printf 'inline bool alwaysSprinting=false,noSlowDown=false,offSlowdownTrigger=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool noJumpDelay=false,isLANGame=false,fastFall=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool step=false,ladderFly=false,noclip=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool creativeFly=false,forceCreativeFly=false,offWaterTrigger=false;\n' >> "$VARS_INJECT"
+          printf 'inline float jumpValue=0.42f,gravityValue=0.08f;\n' >> "$VARS_INJECT"
+          printf 'inline bool antiVoid=false,noFall=false,antiKB=false;\n' >> "$VARS_INJECT"
+          printf 'inline float flySpeed=1.0f,speedValue=1.0f;\n' >> "$VARS_INJECT"
+          printf 'inline bool fly=false,bhop=false,tpHack=false;\n' >> "$VARS_INJECT"
+          # ── Combat variables ────────────────────────────────────────────
+          printf 'inline bool mobAura=false,autoSword=false,triggerBot=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool criticals=false,antiCrit=false,aimAssist=false;\n' >> "$VARS_INJECT"
+          printf 'inline float aimAssistStrength=1.0f,aimFov=90.0f;\n' >> "$VARS_INJECT"
+          printf 'inline int maxMobAuraTick=5,currentMobTick=0;\n' >> "$VARS_INJECT"
+          printf 'inline bool canMobAuraDamage=false;\n' >> "$VARS_INJECT"
+          # ── Visual variables ────────────────────────────────────────────
+          printf 'inline bool fullBright=false,noFog=false,xrayDefault=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool noRender=false,noParticles=false,freeCam=false;\n' >> "$VARS_INJECT"
+          printf 'inline float fovValue=70.0f,brightness=1.0f;\n' >> "$VARS_INJECT"
+          printf 'inline bool deathPosition=false,chestEsp=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool espBox=false,espLine=false,espNametag=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool espHealth=false,espPlatform=false,espDistance=false;\n' >> "$VARS_INJECT"
+          # ── Player/inventory variables ──────────────────────────────────
+          printf 'inline bool instaBreak=false,nuker=false,chestStealer=false;\n' >> "$VARS_INJECT"
+          printf 'inline bool autoEat=false,autoFish=false,antiHunger=false;\n' >> "$VARS_INJECT"
+          printf 'inline float reach=3.0f,blockReach=4.5f;\n' >> "$VARS_INJECT"
+          # ── World/LAN variables ─────────────────────────────────────────
+          printf 'inline bool lanOpen=false,antiCheat=false;\n' >> "$VARS_INJECT"
+          printf 'inline int  lanPort=19132;\n' >> "$VARS_INJECT"
+          # ── UI/theme variables ──────────────────────────────────────────
+          printf 'inline bool showFPS=false,showPing=false,showCoords=true;\n' >> "$VARS_INJECT"
+          printf 'inline bool arrayList=false,watermark=true;\n' >> "$VARS_INJECT"
+          printf 'inline float endV=0.0f;\n' >> "$VARS_INJECT"
+
           printf 'inline float currentFov      = 70.0f;\n' >> "$VARS_INJECT"
           printf 'inline float currentViewMatrix[16] = {};\n' >> "$VARS_INJECT"
           printf 'inline float CameraPos[3]    = {};\n' >> "$VARS_INJECT"
