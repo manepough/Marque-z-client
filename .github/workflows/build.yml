@@ -86,91 +86,10 @@ jobs:
           done
 
 
-          # Inject missing variable declarations into menu.h
-          # These were from the original project headers
+          # Generate vars_inject.h via base64 (no heredoc = YAML safe)
           VARS_INJECT="$JNI/vars_inject.h"
-          printf '#pragma once\n' > "$VARS_INJECT"
-          printf '// Missing variable declarations restored\n' >> "$VARS_INJECT"
-          printf 'inline int  auraType            = 0;\n' >> "$VARS_INJECT"
-          printf 'inline int  maxKillTick         = 5;\n' >> "$VARS_INJECT"
-          printf 'inline int  currentKillTick     = 0;\n' >> "$VARS_INJECT"
-          printf 'inline bool canKillAuraDamage   = false;\n' >> "$VARS_INJECT"
-          printf 'inline int  maxMobAuraTick      = 5;\n' >> "$VARS_INJECT"
-          printf 'inline int  currentMobTick      = 0;\n' >> "$VARS_INJECT"
-          printf 'inline bool canMobAuraDamage    = false;\n' >> "$VARS_INJECT"
-          printf 'inline bool emulateNativeAttack = false;\n' >> "$VARS_INJECT"
-          printf 'inline bool rotations           = true;\n' >> "$VARS_INJECT"
-          printf 'inline bool targetLock          = false;\n' >> "$VARS_INJECT"
-          printf 'inline bool autoClicker         = false;\n' >> "$VARS_INJECT"
-          printf 'inline int  autoClickDelay      = 5;\n' >> "$VARS_INJECT"
-          printf 'inline int  currentAutoClickTick= 0;\n' >> "$VARS_INJECT"
-          printf 'inline bool canClick            = false;\n' >> "$VARS_INJECT"
-          printf 'inline int  maxAutoClickTick    = 5;\n' >> "$VARS_INJECT"
-          printf 'inline bool panic               = false;\n' >> "$VARS_INJECT"
-          printf 'static const unsigned char YoutubeIcon[]      = {0};\n' >> "$VARS_INJECT"
-          printf 'static const unsigned char TelegramIcon[]     = {0};\n' >> "$VARS_INJECT"
-          printf 'static const unsigned char DiscordIcon[]      = {0};\n' >> "$VARS_INJECT"
-          printf 'static const unsigned char AmethystShardIcon[]= {0};\n' >> "$VARS_INJECT"
-          printf '#include <GLES3/gl3.h>\n' >> "$VARS_INJECT"
-          printf 'static inline unsigned int CreateTextureFromMemoryPNG(const unsigned char* d, int s){return 0;}\n' >> "$VARS_INJECT"
-          printf 'inline bool  readMe          = false;\n' >> "$VARS_INJECT"
-          printf 'inline float screenWidth     = 1080.0f;\n' >> "$VARS_INJECT"
-          printf 'inline float screenHeight    = 1920.0f;\n' >> "$VARS_INJECT"
-          printf 'inline float calcResX        = 1.0f;\n' >> "$VARS_INJECT"
-          printf 'inline float scaleGlobal     = 1.0f;\n' >> "$VARS_INJECT"
-          printf 'inline int   pageId          = 0;\n' >> "$VARS_INJECT"
-          printf 'inline void* g_window        = nullptr;\n' >> "$VARS_INJECT"
-          printf 'static inline float calculateResolutionScale(float w,float h,float bw,float bh){return w/bw;}\n' >> "$VARS_INJECT"
-          printf 'static inline void BackGroundDots(int,float,float,float){}\n' >> "$VARS_INJECT"
-          printf 'static inline void SectionHeader(const char* s){ImGui::TextColored(ImVec4(0,0.82f,0.95f,1),s);ImGui::Separator();}\n' >> "$VARS_INJECT"
-          printf 'static inline void DrawSeparatorToWindowEdge(float,float){}\n' >> "$VARS_INJECT"
-          printf 'static inline void RenderESP(ImDrawList*,float*,float,float*){}\n' >> "$VARS_INJECT"
-          printf 'static inline void RenderOreESP(ImDrawList*,float*,float,float*){}\n' >> "$VARS_INJECT"
-          printf 'static inline void RenderDeathPosition(ImDrawList*,float*,float,float*){}\n' >> "$VARS_INJECT"
-          printf 'static inline void RenderHudExtras(float,float){}\n' >> "$VARS_INJECT"
-          # ── Movement variables ──────────────────────────────────────────
-          printf 'inline float waterSpeedValue=1.0f,lavaSpeedValue=1.0f;\n' >> "$VARS_INJECT"
-          printf 'inline bool alwaysSprinting=false,noSlowDown=false,offSlowdownTrigger=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool noJumpDelay=false,isLANGame=false,fastFall=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool step=false,ladderFly=false,noclip=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool creativeFly=false,forceCreativeFly=false,offWaterTrigger=false;\n' >> "$VARS_INJECT"
-          printf 'inline float jumpValue=0.42f,gravityValue=0.08f;\n' >> "$VARS_INJECT"
-          printf 'inline bool antiVoid=false,noFall=false,antiKB=false;\n' >> "$VARS_INJECT"
-          printf 'inline float flySpeed=1.0f,speedValue=1.0f;\n' >> "$VARS_INJECT"
-          printf 'inline bool fly=false,bhop=false,tpHack=false;\n' >> "$VARS_INJECT"
-          # ── Combat variables ────────────────────────────────────────────
-          printf 'inline bool mobAura=false,autoSword=false,triggerBot=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool criticals=false,antiCrit=false,aimAssist=false;\n' >> "$VARS_INJECT"
-          printf 'inline float aimAssistStrength=1.0f,aimFov=90.0f;\n' >> "$VARS_INJECT"
-          printf 'inline int maxMobAuraTick=5,currentMobTick=0;\n' >> "$VARS_INJECT"
-          printf 'inline bool canMobAuraDamage=false;\n' >> "$VARS_INJECT"
-          # ── Visual variables ────────────────────────────────────────────
-          printf 'inline bool fullBright=false,noFog=false,xrayDefault=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool noRender=false,noParticles=false,freeCam=false;\n' >> "$VARS_INJECT"
-          printf 'inline float fovValue=70.0f,brightness=1.0f;\n' >> "$VARS_INJECT"
-          printf 'inline bool deathPosition=false,chestEsp=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool espBox=false,espLine=false,espNametag=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool espHealth=false,espPlatform=false,espDistance=false;\n' >> "$VARS_INJECT"
-          # ── Player/inventory variables ──────────────────────────────────
-          printf 'inline bool instaBreak=false,nuker=false,chestStealer=false;\n' >> "$VARS_INJECT"
-          printf 'inline bool autoEat=false,autoFish=false,antiHunger=false;\n' >> "$VARS_INJECT"
-          printf 'inline float reach=3.0f,blockReach=4.5f;\n' >> "$VARS_INJECT"
-          # ── World/LAN variables ─────────────────────────────────────────
-          printf 'inline bool lanOpen=false,antiCheat=false;\n' >> "$VARS_INJECT"
-          printf 'inline int  lanPort=19132;\n' >> "$VARS_INJECT"
-          # ── UI/theme variables ──────────────────────────────────────────
-          printf 'inline bool showFPS=false,showPing=false,showCoords=true;\n' >> "$VARS_INJECT"
-          printf 'inline bool arrayList=false,watermark=true;\n' >> "$VARS_INJECT"
-          printf 'inline float endV=0.0f;\n' >> "$VARS_INJECT"
-
-          printf 'inline float currentFov      = 70.0f;\n' >> "$VARS_INJECT"
-          printf 'inline float currentViewMatrix[16] = {};\n' >> "$VARS_INJECT"
-          printf 'inline float CameraPos[3]    = {};\n' >> "$VARS_INJECT"
-          printf 'inline void* RenderPlayer    = nullptr;\n' >> "$VARS_INJECT"
-
-          # Also remove the icon-loading lines from menu.h that reference missing data
-          sed -i '/YoutubeIcon\|TelegramIcon\|DiscordIcon\|AmethystShardIcon\|CreateTextureFromMemoryPNG\|youtube_icon\|telegram_icon\|discord_icon\|amethyst_shard_icon/d' "$JNI/menu.h"
-
+          echo 'I3ByYWdtYSBvbmNlCiNpZm5kZWYgT0JGVVNDQVRFCiNkZWZpbmUgT0JGVVNDQVRFKHgpICh4KQojZW5kaWYKI2luY2x1ZGUgImltZ3VpL2ltZ3VpLmgiCiNpbmNsdWRlICJpbWd1aS9pbWd1aV9pbnRlcm5hbC5oIgojaW5jbHVkZSA8R0xFUzMvZ2wzLmg+CgovLyBTY3JlZW4gLyBsYXlvdXQKaW5saW5lIGZsb2F0IHNjcmVlbldpZHRoPTEwODAuMGYsc2NyZWVuSGVpZ2h0PTE5MjAuMGYsc2NhbGVHbG9iYWw9MS4wZixjYWxjUmVzWD0xLjBmOwppbmxpbmUgaW50ICAgcGFnZUlkPTA7CmlubGluZSBib29sICByZWFkTWU9ZmFsc2U7CmlubGluZSBJbVZlYzIgZW5kVj1JbVZlYzIoMCwwKTsKaW5saW5lIHZvaWQqIGdfd2luZG93PW51bGxwdHI7CgovLyBTdHViIGZ1bmN0aW9ucwojaWZuZGVmIE1BTkVTX1NUVUJTCiNkZWZpbmUgTUFORVNfU1RVQlMKc3RhdGljIGlubGluZSBmbG9hdCBjYWxjdWxhdGVSZXNvbHV0aW9uU2NhbGUoZmxvYXQgdyxmbG9hdCxmbG9hdCBidyxmbG9hdCl7cmV0dXJuIHcvYnc7fQpzdGF0aWMgaW5saW5lIHZvaWQgQmFja0dyb3VuZERvdHMoaW50LGZsb2F0LGZsb2F0LGZsb2F0KXt9CnN0YXRpYyBpbmxpbmUgdm9pZCBEcmF3U2VwYXJhdG9yVG9XaW5kb3dFZGdlKEltVmVjMixmbG9hdCl7fQpzdGF0aWMgaW5saW5lIHVuc2lnbmVkIGludCBDcmVhdGVUZXh0dXJlRnJvbU1lbW9yeVBORyhjb25zdCB1bnNpZ25lZCBjaGFyKixpbnQpe3JldHVybiAwO30Kc3RhdGljIGlubGluZSB2b2lkIFJlbmRlckVTUChJbURyYXdMaXN0KixmbG9hdCosZmxvYXQsZmxvYXQqKXt9CnN0YXRpYyBpbmxpbmUgdm9pZCBSZW5kZXJPcmVFU1AoSW1EcmF3TGlzdCosZmxvYXQqLGZsb2F0LGZsb2F0Kil7fQpzdGF0aWMgaW5saW5lIHZvaWQgUmVuZGVyRGVhdGhQb3NpdGlvbihJbURyYXdMaXN0KixmbG9hdCosZmxvYXQsZmxvYXQqKXt9CnN0YXRpYyBpbmxpbmUgdm9pZCBSZW5kZXJIdWRFeHRyYXMoZmxvYXQsZmxvYXQpe30KI2VuZGlmCgovLyBJbWFnZSBzdHVicwpzdGF0aWMgY29uc3QgdW5zaWduZWQgY2hhciBZb3V0dWJlSWNvbltdPXswfSxUZWxlZ3JhbUljb25bXT17MH0sRGlzY29yZEljb25bXT17MH0sQW1ldGh5c3RTaGFyZEljb25bXT17MH07CgovLyBLaWxsQXVyYSBmbGF0IHZhcnMKaW5saW5lIGJvb2wgIGtpbGxBdXJhPWZhbHNlOyBpbmxpbmUgZmxvYXQga2lsbFJhbmdlPTQuNWYscm90YXRpb25zUmFuZ2U9NC41ZjsKaW5saW5lIGJvb2wgIG1vYkF1cmE9ZmFsc2U7CmlubGluZSBpbnQgICBtYXhLaWxsVGljaz01LGN1cnJlbnRLaWxsVGljaz0wOyBpbmxpbmUgYm9vbCBjYW5LaWxsQXVyYURhbWFnZT1mYWxzZTsKaW5saW5lIGludCAgIG1heE1vYkF1cmFUaWNrPTUsY3VycmVudE1vYlRpY2s9MDsgaW5saW5lIGJvb2wgY2FuTW9iQXVyYURhbWFnZT1mYWxzZTsKaW5saW5lIGludCAgIGF1cmFUeXBlPTA7CmlubGluZSBib29sICBlbXVsYXRlTmF0aXZlQXR0YWNrPWZhbHNlLHJvdGF0aW9ucz10cnVlLHRhcmdldExvY2s9ZmFsc2U7CgovLyBBdXRvQ2xpY2sKaW5saW5lIGJvb2wgYXV0b0NsaWNrZXI9ZmFsc2U7IGlubGluZSBpbnQgbWF4QXV0b0NsaWNrVGljaz01LGN1cnJlbnRBdXRvQ2xpY2tUaWNrPTAsYXV0b0NsaWNrRGVsYXk9NTsKaW5saW5lIGJvb2wgY2FuQ2xpY2s9ZmFsc2U7CgovLyBQYW5pYwppbmxpbmUgYm9vbCBwYW5pYz1mYWxzZTsKCi8vIE1vdmVtZW50IChpbnQgZm9yIERyYWdJbnQsIGZsb2F0IGZvciBTbGlkZXJGbG9hdCkKaW5saW5lIGludCAgIHNwZWVkVmFsdWU9MSx3YXRlclNwZWVkVmFsdWU9MSxsYXZhU3BlZWRWYWx1ZT0xOwppbmxpbmUgZmxvYXQganVtcFZhbHVlPTAuNDJmLGdyYXZpdHlWYWx1ZT0wLjA4ZixmbHlTcGVlZD0xLjBmOwppbmxpbmUgYm9vbCAgYWx3YXlzU3ByaW50aW5nPWZhbHNlLG5vU2xvd0Rvd249ZmFsc2Usb2ZmU2xvd2Rvd25UcmlnZ2VyPWZhbHNlOwppbmxpbmUgYm9vbCAgbm9KdW1wRGVsYXk9ZmFsc2UsaXNMQU5HYW1lPWZhbHNlLGZhc3RGYWxsPWZhbHNlOwppbmxpbmUgYm9vbCAgc3RlcD1mYWxzZSxsYWRkZXJGbHk9ZmFsc2Usbm9jbGlwPWZhbHNlOwppbmxpbmUgYm9vbCAgY3JlYXRpdmVGbHk9ZmFsc2UsZm9yY2VDcmVhdGl2ZUZseT1mYWxzZTsKaW5saW5lIGJvb2wgIG9mZldhdGVyVHJpZ2dlcj1mYWxzZSxvZmZEcm93bj1mYWxzZSxzdHJhZmU9ZmFsc2UsZGFtYWdlRmx5PWZhbHNlOwppbmxpbmUgYm9vbCAgYW50aVZvaWQ9ZmFsc2Usbm9GYWxsPWZhbHNlLGJob3A9ZmFsc2UsZmx5PWZhbHNlOwoKLy8gQ29tYmF0CmlubGluZSBib29sICBjcml0aWNhbHM9ZmFsc2UsYW50aUNyaXQ9ZmFsc2UsYWltQXNzaXN0PWZhbHNlLGF1dG9Td29yZD1mYWxzZSx0cmlnZ2VyQm90PWZhbHNlOwppbmxpbmUgZmxvYXQgYWltQXNzaXN0U3RyZW5ndGg9MS4wZixhaW1Gb3Y9OTAuMGY7CgovLyBWaXN1YWwKaW5saW5lIGJvb2wgIGZ1bGxCcmlnaHQ9ZmFsc2Usbm9Gb2c9ZmFsc2UseHJheURlZmF1bHQ9ZmFsc2UsZGVhdGhQb3NpdGlvbj1mYWxzZTsKaW5saW5lIGJvb2wgIGNoZXN0RXNwPWZhbHNlLGVzcEJveD1mYWxzZSxlc3BMaW5lPWZhbHNlLGVzcE5hbWV0YWc9ZmFsc2U7CmlubGluZSBib29sICBlc3BIZWFsdGg9ZmFsc2UsZXNwUGxhdGZvcm09ZmFsc2UsZXNwRGlzdGFuY2U9ZmFsc2U7CmlubGluZSBmbG9hdCBmb3ZWYWx1ZT03MC4wZixicmlnaHRuZXNzPTEuMGY7CmlubGluZSBib29sICBub1JlbmRlcj1mYWxzZSxub1BhcnRpY2xlcz1mYWxzZTsKCi8vIFBsYXllciAvIHdvcmxkCmlubGluZSBib29sICBpbnN0YUJyZWFrPWZhbHNlLG51a2VyPWZhbHNlLGF1dG9FYXQ9ZmFsc2UsYW50aUh1bmdlcj1mYWxzZTsKaW5saW5lIGJvb2wgIGxhbk9wZW49ZmFsc2Usc2hvd0ZQUz1mYWxzZSxzaG93Q29vcmRzPXRydWUsd2F0ZXJtYXJrPXRydWUsYXJyYXlMaXN0PWZhbHNlOwppbmxpbmUgaW50ICAgbGFuUG9ydD0xOTEzMjsKCi8vIFJlbmRlciBob29rCmlubGluZSBmbG9hdCBjdXJyZW50Rm92PTcwLjBmLGN1cnJlbnRWaWV3TWF0cml4WzE2XT17fSxDYW1lcmFQb3NbM109e307CmlubGluZSB2b2lkKiBSZW5kZXJQbGF5ZXI9bnVsbHB0cjsK' | base64 -d > "$VARS_INJECT"
+          echo "vars_inject.h generated ($(wc -l < $VARS_INJECT) lines)"
 
           # Include it at top of menu.h
           grep -q "vars_inject" "$JNI/menu.h" || sed -i "1s/^/#include \"vars_inject.h\"\n/" "$JNI/menu.h"
