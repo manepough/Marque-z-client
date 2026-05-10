@@ -86,6 +86,29 @@ jobs:
           done
 
 
+          # Inject missing variable declarations into menu.h
+          # These were from the original project headers
+          VARS_INJECT="$JNI/vars_inject.h"
+          printf '#pragma once\n' > "$VARS_INJECT"
+          printf '// Missing variable declarations restored\n' >> "$VARS_INJECT"
+          printf 'inline int  auraType            = 0;\n' >> "$VARS_INJECT"
+          printf 'inline int  maxKillTick         = 5;\n' >> "$VARS_INJECT"
+          printf 'inline int  currentKillTick     = 0;\n' >> "$VARS_INJECT"
+          printf 'inline bool canKillAuraDamage   = false;\n' >> "$VARS_INJECT"
+          printf 'inline int  maxMobAuraTick      = 5;\n' >> "$VARS_INJECT"
+          printf 'inline int  currentMobTick      = 0;\n' >> "$VARS_INJECT"
+          printf 'inline bool canMobAuraDamage    = false;\n' >> "$VARS_INJECT"
+          printf 'inline bool emulateNativeAttack = false;\n' >> "$VARS_INJECT"
+          printf 'inline bool rotations           = true;\n' >> "$VARS_INJECT"
+          printf 'inline bool targetLock          = false;\n' >> "$VARS_INJECT"
+          printf 'inline bool autoClicker         = false;\n' >> "$VARS_INJECT"
+          printf 'inline int  autoClickDelay      = 5;\n' >> "$VARS_INJECT"
+          printf 'inline int  currentAutoClickTick= 0;\n' >> "$VARS_INJECT"
+          printf 'inline bool canClick            = false;\n' >> "$VARS_INJECT"
+
+          # Include it at top of menu.h
+          grep -q "vars_inject" "$JNI/menu.h" || sed -i "1s/^/#include \"vars_inject.h\"\n/" "$JNI/menu.h"
+
           # Patch menu.h menuOpen references
           sed -i 's/if (menuOpen)/if (FloatingButton::menuOpen)/g'   "$JNI/menu.h"
           sed -i 's/if (!menuOpen)/if (!FloatingButton::menuOpen)/g' "$JNI/menu.h"
