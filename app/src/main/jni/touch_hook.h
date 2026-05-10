@@ -55,14 +55,10 @@ inline int32_t hook_getEvent(AInputQueue* queue, AInputEvent** outEvent) {
 inline void setup() {
     void* lib = dlopen("libandroid.so", RTLD_NOW);
     if (!lib) { TLOG("Failed to open libandroid.so"); return; }
-
     void* fn = dlsym(lib, "AInputQueue_getEvent");
     if (!fn) { TLOG("Failed to find AInputQueue_getEvent"); return; }
-
-    A64HookFunction(fn, (void*)hook_getEvent, (void**)A64HookFunction(fn, (void*)hook_getEvent, (void**)&orig_getEvent);
-    bool ok = (orig_getEvent != nullptr);orig_getEvent);
-    bool ok = (orig_getEvent != nullptr);
-    TLOG("Touch hook: %s", ok ? "SUCCESS" : "FAILED");
+    A64HookFunction(fn, (void*)hook_getEvent, (void**)&orig_getEvent);
+    TLOG("Touch hook: %s", orig_getEvent ? "SUCCESS" : "FAILED");
 }
 
 } // namespace TouchHook

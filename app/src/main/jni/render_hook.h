@@ -129,14 +129,10 @@ inline EGLBoolean hook_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
 inline void setup() {
     void* egl = dlopen("libEGL.so", RTLD_NOW);
     if (!egl) { LOG("Failed to open libEGL.so"); return; }
-
     void* fn = dlsym(egl, "eglSwapBuffers");
     if (!fn) { LOG("Failed to find eglSwapBuffers"); return; }
-
-    A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)&orig);
-    bool ok = (orig != nullptr);orig);
-    bool ok = (orig != nullptr);
-    LOG("eglSwapBuffers hook: %s", ok ? "SUCCESS" : "FAILED");
+    A64HookFunction(fn, (void*)hook_eglSwapBuffers, (void**)&orig);
+    LOG("eglSwapBuffers hook: %s", orig ? "SUCCESS" : "FAILED");
 }
 
 } // namespace RenderHook
